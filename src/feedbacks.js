@@ -66,4 +66,25 @@ function getFeedbacks(self) {
 	}
 }
 
-module.exports = { getFeedbacks }
+/**
+ * One primitive per feedback id, summarising exactly what that feedback reads.
+ * Compare against the previous snapshot's keys to know which ids are stale, so
+ * only those get re-evaluated. Keep in step with the callbacks above.
+ */
+function feedbackKeys(state) {
+	const s = state || {}
+	const layers = s.layers || {}
+	return {
+		// Sorted: dictionary key order on the wire is not guaranteed stable.
+		clip_live: Object.keys(layers)
+			.sort()
+			.map((k) => (layers[k] && layers[k].mediaId) || '')
+			.join('|'),
+		black_active: !!s.black,
+		program_live: !!s.live,
+		playing: !!(s.transport && s.transport.playing),
+		muted: !!s.muted,
+	}
+}
+
+module.exports = { getFeedbacks, feedbackKeys }

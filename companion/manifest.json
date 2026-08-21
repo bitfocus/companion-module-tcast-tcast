@@ -13,7 +13,7 @@
 			"email": "henrykamstra12@gmail.com"
 		}
 	],
-	"legacyIds": ["tcast-playout", "tcast"],
+	"legacyIds": [],
 	"runtime": {
 		"type": "node22",
 		"api": "nodejs-ipc",

@@ -2,7 +2,7 @@ const { InstanceBase, runEntrypoint, InstanceStatus } = require('@companion-modu
 const { getConfigFields } = require('./src/config')
 const { TcastClient } = require('./src/client')
 const { getActions } = require('./src/actions')
-const { getFeedbacks } = require('./src/feedbacks')
+const { getFeedbacks, feedbackKeys } = require('./src/feedbacks')
 const { getVariableDefinitions, variableValues } = require('./src/variables')
 const { getPresets } = require('./src/presets')
 
@@ -11,6 +11,9 @@ class TcastInstance extends InstanceBase {
 		this.config = config
 		/** Latest feedback snapshot pushed by TCast (null until connected). */
 		this.state = null
+		/** Last values pushed to Companion, so unchanged ones aren't pushed again. */
+		this.lastVars = {}
+		this.lastFeedbackKeys = {}
 
 		this.setVariableDefinitions(getVariableDefinitions())
 		this.setPresetDefinitions(getPresets())
@@ -26,6 +29,9 @@ class TcastInstance extends InstanceBase {
 
 	async configUpdated(config) {
 		this.config = config
+		// A different TCast means the caches describe nothing; push everything again.
+		this.lastVars = {}
+		this.lastFeedbackKeys = {}
 		if (this.client) {
 			this.client.stop()
 			this.client.start()
@@ -50,22 +56,42 @@ class TcastInstance extends InstanceBase {
 	onMessage(msg) {
 		if (!msg || typeof msg !== 'object') return
 		if (msg.type === 'state') {
-			const prevCount = this.state && this.state.clips ? this.state.clips.length : -1
-			const prevClipIds = this.clipSignature(this.state)
+			const prevSignature = this.clipSignature(this.state)
 			this.state = msg
 			// Only rebuild dropdowns when the clip set actually changed.
 			// Avoids churn on every play/pause tally update.
-			const newSig = this.clipSignature(msg)
-			if (newSig !== prevClipIds || (msg.clips && msg.clips.length !== prevCount)) {
-				this.rebuildDefinitions()
-			}
-			this.setVariableValues(variableValues(this.state))
-			this.checkFeedbacks()
+			if (this.clipSignature(msg) !== prevSignature) this.rebuildDefinitions()
 			this.updateStatus(InstanceStatus.Ok)
+			this.publish()
 		} else if (msg.type === 'transport') {
+			if (!this.state) return
 			// Merge the tick into the cached snapshot for the time variables.
-			if (this.state) this.state.transport = { ...this.state.transport, ...msg }
-			this.setVariableValues(variableValues(this.state))
+			this.state.transport = { ...this.state.transport, ...msg }
+			this.publish()
+		}
+	}
+
+	/**
+	 * Push the variables and feedbacks whose values actually changed, and nothing
+	 * else. Transport ticks arrive about once a second and move two variables at
+	 * most, so a blanket push would be almost entirely redundant traffic.
+	 */
+	publish() {
+		const values = variableValues(this.state)
+		const changed = {}
+		for (const key of Object.keys(values)) {
+			if (this.lastVars[key] !== values[key]) changed[key] = values[key]
+		}
+		if (Object.keys(changed).length) {
+			this.setVariableValues(changed)
+			Object.assign(this.lastVars, changed)
+		}
+
+		const keys = feedbackKeys(this.state)
+		const stale = Object.keys(keys).filter((id) => this.lastFeedbackKeys[id] !== keys[id])
+		if (stale.length) {
+			this.checkFeedbacks(...stale)
+			this.lastFeedbackKeys = keys
 		}
 	}
 
