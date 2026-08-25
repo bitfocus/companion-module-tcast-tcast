@@ -16,8 +16,10 @@ class TcastInstance extends InstanceBase {
 		this.lastFeedbackKeys = {}
 
 		this.setVariableDefinitions(getVariableDefinitions())
-		this.setPresetDefinitions(getPresets())
+		// Actions first: Companion validates presets against the known action ids
+		// as they are registered, and warns for every id that is not defined yet.
 		this.rebuildDefinitions()
+		this.setPresetDefinitions(getPresets())
 
 		this.client = new TcastClient(this)
 		this.client.start()

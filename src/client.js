@@ -14,6 +14,9 @@ class TcastClient {
 		this.reconnectTimer = null
 		this.shouldRun = false
 		this.backoff = 1000
+		/** Set when the server answered the upgrade with 401, so retries keep
+		 *  reporting the password problem instead of a generic "connecting". */
+		this.authFailed = false
 	}
 
 	get base() {
@@ -34,6 +37,8 @@ class TcastClient {
 
 	start() {
 		this.shouldRun = true
+		// A fresh start may carry a corrected password.
+		this.authFailed = false
 		this.connect()
 	}
 
@@ -61,7 +66,10 @@ class TcastClient {
 			this.instance.updateStatus(InstanceStatus.BadConfig, 'Set host and port')
 			return
 		}
-		this.instance.updateStatus(InstanceStatus.Connecting)
+		this.instance.updateStatus(
+			this.authFailed ? InstanceStatus.AuthenticationFailure : InstanceStatus.Connecting,
+			this.authFailed ? 'Wrong or missing control password' : undefined
+		)
 
 		let ws
 		try {
@@ -74,6 +82,7 @@ class TcastClient {
 
 		ws.on('open', () => {
 			this.backoff = 1000
+			this.authFailed = false
 			this.instance.updateStatus(InstanceStatus.Ok)
 			try {
 				ws.send(JSON.stringify({ type: 'hello', role: 'companion' }))
@@ -92,6 +101,25 @@ class TcastClient {
 			this.instance.onMessage(msg)
 		})
 
+		ws.on('unexpected-response', (req, res) => {
+			// TCast answers a bad control password with 401 on the upgrade.
+			// Without this the connection just reads "Disconnected", which looks
+			// identical to TCast not running. ws emits neither 'close' nor
+			// 'error' for a refused upgrade, so the socket has to be torn down
+			// and the retry scheduled right here. Tear down via the request:
+			// ws.terminate() on a still-connecting socket throws asynchronously.
+			const code = res.statusCode
+			res.resume()
+			req.destroy()
+			if (this.ws === ws) this.ws = null
+			this.authFailed = code === 401
+			this.instance.updateStatus(
+				this.authFailed ? InstanceStatus.AuthenticationFailure : InstanceStatus.ConnectionFailure,
+				this.authFailed ? 'Wrong or missing control password' : `Upgrade refused: HTTP ${code}`
+			)
+			this.scheduleReconnect(true)
+		})
+
 		ws.on('close', () => {
 			if (this.ws === ws) this.ws = null
 			this.scheduleReconnect()
@@ -103,9 +131,9 @@ class TcastClient {
 		})
 	}
 
-	scheduleReconnect() {
+	scheduleReconnect(keepStatus = false) {
 		if (!this.shouldRun || this.reconnectTimer) return
-		this.instance.updateStatus(InstanceStatus.Disconnected)
+		if (!keepStatus) this.instance.updateStatus(InstanceStatus.Disconnected)
 		this.reconnectTimer = setTimeout(() => {
 			this.reconnectTimer = null
 			this.connect()
