@@ -28,7 +28,11 @@ function getConfigFields() {
 			regex: Regex.PORT,
 		},
 		{
-			type: 'textinput',
+			// secret-text, not textinput: the value is kept in Companion's
+			// secrets store rather than in the connection config, so it is not
+			// reported to the web UI and does not travel inside an exported
+			// config unless the operator asks for secrets to be included.
+			type: 'secret-text',
 			id: 'password',
 			label: 'Control password (optional)',
 			width: 12,

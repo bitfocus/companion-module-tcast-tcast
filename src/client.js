@@ -31,7 +31,7 @@ class TcastClient {
 
 	/** Auth header when a control password is configured in TCast; empty otherwise. */
 	get authHeaders() {
-		const pw = (this.instance.config.password || '').trim()
+		const pw = ((this.instance.secrets && this.instance.secrets.password) || '').trim()
 		return pw ? { 'X-Control-Password': pw } : {}
 	}
 
@@ -52,7 +52,7 @@ class TcastClient {
 			try {
 				this.ws.removeAllListeners()
 				this.ws.close()
-			} catch (_e) {
+			} catch {
 				// already closing
 			}
 			this.ws = null
@@ -68,13 +68,13 @@ class TcastClient {
 		}
 		this.instance.updateStatus(
 			this.authFailed ? InstanceStatus.AuthenticationFailure : InstanceStatus.Connecting,
-			this.authFailed ? 'Wrong or missing control password' : undefined
+			this.authFailed ? 'Wrong or missing control password' : undefined,
 		)
 
 		let ws
 		try {
 			ws = new WebSocket(this.wsUrl, { headers: this.authHeaders })
-		} catch (e) {
+		} catch {
 			this.scheduleReconnect()
 			return
 		}
@@ -86,7 +86,7 @@ class TcastClient {
 			this.instance.updateStatus(InstanceStatus.Ok)
 			try {
 				ws.send(JSON.stringify({ type: 'hello', role: 'companion' }))
-			} catch (_e) {
+			} catch {
 				// snapshot is sent on connect anyway
 			}
 		})
@@ -95,7 +95,7 @@ class TcastClient {
 			let msg
 			try {
 				msg = JSON.parse(data.toString())
-			} catch (_e) {
+			} catch {
 				return
 			}
 			this.instance.onMessage(msg)
@@ -115,7 +115,7 @@ class TcastClient {
 			this.authFailed = code === 401
 			this.instance.updateStatus(
 				this.authFailed ? InstanceStatus.AuthenticationFailure : InstanceStatus.ConnectionFailure,
-				this.authFailed ? 'Wrong or missing control password' : `Upgrade refused: HTTP ${code}`
+				this.authFailed ? 'Wrong or missing control password' : `Upgrade refused: HTTP ${code}`,
 			)
 			this.scheduleReconnect(true)
 		})

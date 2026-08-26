@@ -1,6 +1,6 @@
 {
 	"name": "tcast-tcast",
-	"version": "1.0.3",
+	"version": "1.0.4",
 	"description": "Bitfocus Companion module for TCast playout",
 	"main": "main.js",
 	"type": "commonjs",
@@ -10,7 +10,9 @@
 	"bugs": "https://github.com/bitfocus/companion-module-tcast-tcast/issues",
 	"scripts": {
 		"format": "prettier -w .",
-		"package": "companion-module-build"
+		"package": "companion-module-build",
+		"lint": "eslint .",
+		"lint:fix": "eslint . --fix"
 	},
 	"engines": {
 		"node": "^22.20",
@@ -24,6 +26,7 @@
 	},
 	"devDependencies": {
 		"@companion-module/tools": "^2.7.2",
+		"eslint": "^9.36.0",
 		"prettier": "^3.6.2"
 	}
 }

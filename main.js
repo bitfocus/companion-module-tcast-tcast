@@ -7,8 +7,11 @@ const { getVariableDefinitions, variableValues } = require('./src/variables')
 const { getPresets } = require('./src/presets')
 
 class TcastInstance extends InstanceBase {
-	async init(config) {
+	async init(config, _isFirstInit, secrets) {
 		this.config = config
+		// The control password lives in the secrets store, not in config.
+		// Older hosts pass nothing, so treat it as absent rather than crashing.
+		this.secrets = secrets || {}
 		/** Latest feedback snapshot pushed by TCast (null until connected). */
 		this.state = null
 		/** Last values pushed to Companion, so unchanged ones aren't pushed again. */
@@ -29,8 +32,9 @@ class TcastInstance extends InstanceBase {
 		if (this.client) this.client.stop()
 	}
 
-	async configUpdated(config) {
+	async configUpdated(config, secrets) {
 		this.config = config
+		this.secrets = secrets || {}
 		// A different TCast means the caches describe nothing; push everything again.
 		this.lastVars = {}
 		this.lastFeedbackKeys = {}
